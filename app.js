@@ -102,6 +102,7 @@ function do_jq(data, jq_args) {
 }
 
 function recalculate() {
+  // TODO: point at API2 and re-enable html elements for players and teams.
   if($("#player_enable").is(":checked") && horrible_player_string == "") {
     $("#player_load").show();
     $.ajax({url: "https://api.sibr.dev/chronicler/v2/entities?type=player", success: function(players) {
@@ -128,6 +129,8 @@ function recalculate() {
 
     if($("#base").val() == "sibr") {
       url = "https://api.sibr.dev/" + $("#query").val();
+    } else if ($("#base").val() == "sibr2") {
+      url = "https://api2.sibr.dev/" + $("#query").val();
     } else if ($("#base").val() == "blaseball") {
       url = "https://api.sibr.dev/corsmechanics/www.blaseball.com/" + $("#query").val();
     } else {
@@ -176,29 +179,37 @@ $( document ).ready(function() {
 jq.onInitialized.addListener(function function_name(argument) {
   recalculate();
 
-  $('#base').on('input', function() {
-    response = null;
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(function() {
-      recalculate();
-    }, 1000);
-  });
+  // These are commented as we moved to submit button based jq
 
-  $('#query').on('input', function() {
-    response = null;
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(function() {
-      recalculate();
-    }, 1000);
-  });
+  // $('#base').on('input', function() {
+  //   response = null;
+  //   clearTimeout(timeoutId);
+  //   timeoutId = setTimeout(function() {
+  //     recalculate();
+  //   }, 1000);
+  // });
 
-  $('#jq_str').on('input', function() {
+  // $('#query').on('input', function() {
+  //   response = null;
+  //   clearTimeout(timeoutId);
+  //   timeoutId = setTimeout(function() {
+  //     recalculate();
+  //   }, 1000);
+  // });
+
+  // $('#jq_str').on('input', function() {
+  //   output = null;
+  //   clearTimeout(timeoutId);
+  //   timeoutId = setTimeout(function() {
+  //     recalculate();
+  //   }, 1000);
+  // });
+
+  $("#random_btn").on('click', function() {
     output = null;
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(function() {
-      recalculate();
-    }, 1000);
+    recalculate();
   });
+
 
   $('#csv_enable').on('change', function() {
     output = null;

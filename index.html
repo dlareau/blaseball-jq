@@ -3,8 +3,8 @@
 <head>
   <meta charset=utf-8>
   <title>Blaseball jq</title>
-  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.0.1/styles/default.min.css">
-  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.0.1/highlight.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.0.1/styles/default.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.0.1/highlight.min.js"></script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.js"></script>
   <script src="jquery.csv.min.js"></script>
@@ -24,7 +24,7 @@
     <div class="row">
       <button id="json_btn" type="button" class="col btn btn-secondary">Download JSON</button>
       <button id="csv_btn" type="button" class="col offset-1 btn btn-secondary">Download CSV</button>
-      <button id="random_btn" type="button" class="col offset-1 btn btn-secondary">Random Query</button>
+      <!-- <button id="random_btn" type="button" class="col offset-1 btn btn-secondary">Random Query</button> -->
       <button id="help_btn" type="button" class="col offset-1 btn btn-secondary" data-toggle="collapse" href="#collapseBox" role="button" aria-expanded="false" aria-controls="collapseBox">Toggle Help</button>
     </div>
     <div class="collapse" id="collapseBox">
@@ -75,6 +75,7 @@
         </label>
         <div class="col-sm-3">
           <select class="form-control" name="base" id="base">
+            <option value="sibr2">https://api2.sibr.dev/</option>
             <option value="sibr">https://api.sibr.dev/</option>
             <option value="blaseball">https://www.blaseball.com/</option>
           </select>
@@ -95,19 +96,22 @@
         </div>
       </div>
       <div class="form-group row">
-        <div class="col-sm-2">
+        <div class="col-sm-3">
           <input type="checkbox" name="csv_enable" class="form-check-input" id="csv_enable">
           <label class="form-check-label" for="csv_enable">CSV Output</label>
         </div>
-        <div class="col-sm-2">
+        <div class="col-sm-3">
           <input type="checkbox" name="table_enable" class="form-check-input" id="table_enable">
           <label class="form-check-label" for="table_enable">Table Output</label>
         </div>
-        <div class="col-sm-2">
+        <div class="col-sm-3">
           <input type="checkbox" name="count_enable" class="form-check-input" id="count_enable">
           <label class="form-check-label" for="count_enable">Count</label>
         </div>
         <div class="col-sm-3">
+          <button id="json_btn" type="button" class="col btn btn-primary">Submit</button>
+        </div>
+<!--         <div class="col-sm-3">
           <input type="checkbox" name="team_enable" class="form-check-input" id="team_enable">
           <label class="form-check-label" for="team_enable">Load Team Names</label>
           <div id="team_load" class="spinner-border spinner-border-sm" role="status" style="display: none;">
@@ -120,7 +124,7 @@
           <div id="player_load" class="spinner-border spinner-border-sm" role="status" style="display: none;">
             <span class="sr-only">Loading...</span>
           </div>
-        </div>
+        </div> -->
       </div>
     </form>
     <div id="error_div" class="alert alert-danger" role="alert" style="display: none;"></div>
