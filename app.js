@@ -205,7 +205,7 @@ jq.onInitialized.addListener(function function_name(argument) {
   //   }, 1000);
   // });
 
-  $("#random_btn").on('click', function() {
+  $("#recalculate").on('click', function() {
     output = null;
     recalculate();
   });
