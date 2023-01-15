@@ -3,8 +3,8 @@
 <head>
   <meta charset=utf-8>
   <title>Blaseball jq</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.0.1/styles/default.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.0.1/highlight.min.js"></script>
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.0.1/styles/default.min.css">
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.0.1/highlight.min.js"></script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.js"></script>
   <script src="jquery.csv.min.js"></script>
@@ -17,15 +17,15 @@
   <script src="jq.wasm.js"></script>
   <script src="app.js"></script>
 </head>
-<body>
+<body onunload="saveState()">
   <div class="container">
     <h2>Blaseball jq</h2>
     <br>
     <div class="row">
       <button id="json_btn" type="button" class="col btn btn-secondary">Download JSON</button>
       <button id="csv_btn" type="button" class="col offset-1 btn btn-secondary">Download CSV</button>
-      <!-- <button id="random_btn" type="button" class="col offset-1 btn btn-secondary">Random Query</button> -->
       <button id="help_btn" type="button" class="col offset-1 btn btn-secondary" data-toggle="collapse" href="#collapseBox" role="button" aria-expanded="false" aria-controls="collapseBox">Toggle Help</button>
+      <button id="share_btn" type="button" class="col offset-1 btn btn-secondary">Share</button>
     </div>
     <div class="collapse" id="collapseBox">
       <br>
@@ -74,14 +74,14 @@
           <i id="web_error" class="fa fa-remove" style="display: none; color:red;"></i>
         </label>
         <div class="col-sm-3">
-          <select class="form-control" name="base" id="base">
+          <select class="updateWatchURL form-control" name="base" id="base">
             <option value="sibr2">https://api2.sibr.dev/</option>
             <option value="sibr">https://api.sibr.dev/</option>
             <option value="blaseball">https://www.blaseball.com/</option>
           </select>
         </div>
         <div class="col-sm-7">
-          <input type="text" class="form-control" name="query" id="query" placeholder="chronicler/v2/entities?type=stadium">
+          <input type="text" class="updateWatchURL form-control" name="query" id="query" placeholder="chronicler/v2/entities?type=stadium">
         </div>
       </div>
       <div class="form-group row">
@@ -92,41 +92,47 @@
           </div>
         </label>
         <div class="col-sm-10">
-          <input type="text" class="form-control" name="jq_str" id="jq_str" placeholder=".items[].data.name">
+          <input type="text" class="updateWatchJQ form-control" name="jq_str" id="jq_str" placeholder=".items[].data.name">
         </div>
       </div>
       <div class="form-group row">
-        <div class="col-sm-3">
-          <input type="checkbox" name="csv_enable" class="form-check-input" id="csv_enable">
-          <label class="form-check-label" for="csv_enable">CSV Output</label>
+        <label for="output_mode" class="col-sm-2 col-form-label">
+          Description
+        </label>
+        <div class="col-sm-10">
+          <input type="text" class="form-control" name="desc" id="desc" placeholder="Optional">
         </div>
+      </div>
+      <div class="form-group row">
+        <label for="output_mode" class="col-sm-2 col-form-label">
+          Output
+        </label>
         <div class="col-sm-3">
-          <input type="checkbox" name="table_enable" class="form-check-input" id="table_enable">
-          <label class="form-check-label" for="table_enable">Table Output</label>
+          <select class="updateImmediate form-control" name="output_mode" id="output_mode">
+            <option value="json">JSON</option>
+            <option value="csv">CSV</option>
+            <option value="table">Table</option>
+            <option value="count">Count</option>
+          </select>
         </div>
-        <div class="col-sm-3">
-          <input type="checkbox" name="count_enable" class="form-check-input" id="count_enable">
-          <label class="form-check-label" for="count_enable">Count</label>
-        </div>
-        <div class="col-sm-3">
-          <button id="recalculate" type="button" class="col btn btn-primary">Submit</button>
-        </div>
-<!--         <div class="col-sm-3">
-          <input type="checkbox" name="team_enable" class="form-check-input" id="team_enable">
-          <label class="form-check-label" for="team_enable">Load Team Names</label>
-          <div id="team_load" class="spinner-border spinner-border-sm" role="status" style="display: none;">
-            <span class="sr-only">Loading...</span>
-          </div>
-        </div>
-        <div class="col-sm-3">
-          <input type="checkbox" name="player_enable" class="form-check-input" id="player_enable">
-          <label class="form-check-label" for="player_enable">Load Player Names</label>
-          <div id="player_load" class="spinner-border spinner-border-sm" role="status" style="display: none;">
-            <span class="sr-only">Loading...</span>
-          </div>
-        </div> -->
+        <button id="clear_btn" type="button" class="col-2 offset-1 btn btn-secondary">Clear</button>
+        <button id="recalculate" type="button" class="col-2 offset-2 btn btn-primary">Submit</button>
       </div>
     </form>
+    <div class="modal fade" id="shareModal" tabindex="-1" role="dialog" aria-labelledby="shareModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="shareModalLabel">Share</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div id="link_div" class="modal-body">
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="error_div" class="alert alert-danger" role="alert" style="display: none;"></div>
     <pre><code id="result" class="language-json"></code></pre>
     <div id="tableResult" style="overflow: auto;"></div>
