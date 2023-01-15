@@ -1,281 +1,343 @@
-var response = null;
-var output = null;
-var timeoutId;
-var globalError = null;
-var horrible_team_string = "";
-var horrible_player_string = "";
+state = {"output_mode": "json",
+         "base": "sibr2",
+         "query": "",
+         "jq_str": "",
+         "flags": "",
+         "desc": "",
+         "options": {}
+};
 
-function getURLargs() {
-  var urlParams = new URLSearchParams(window.location.search);
-  if(urlParams.has("base")) {
-    $("#base").val(urlParams.get("base"));
-  }
+examples = [
+      {"output_mode": "json", "options": {},
+       "query": "chronicler/v2/versions?type=globalevents&order=desc",
+       "jq_str": "[.items[] | {(.validFrom): [.data[].msg]}] | add",
+       "desc": "Previous sets of ticker messages and when they were first seen."},
+      {"output_mode": "json", "options": {},
+       "query": "chronicler/v2/entities?type=stadium",
+       "jq_str": ".items[].data.name",
+       "desc": "The name of every existing stadium"},
+      {"output_mode": "json", "options": {},
+       "query": "chronicler/v2/entities?type=team",
+       "jq_str": "[.items[].data | select(.stadium) | {team: .nickname, eDensity: .eDensity}] | sort_by(.eDensity)[]",
+       "desc": "Each team's name and eDensity"},
+      {"output_mode": "json", "options": {},
+       "query": 'chronicler/v2/entities?type=item',
+       "jq_str": '.items | .[].data | select(.name == "Inflatable Sunglasses")',
+       "desc": "Details for the item named \"Inflatable sunglasses\""},
+      {"output_mode": "json", "options": {},
+       "query": 'chronicler/v2/entities?type=team',
+       "jq_str": '.items[].data | select(.permAttr| index("AFFINITY_FOR_CROWS")) | .nickname',
+       "desc": "Teams with the AFFINITY_FOR_CROWS mod"},
+      {"output_mode": "json", "options": {},
+       "query": 'eventually/v2/events?playerTags=21cbbfaa-100e-48c5-9cea-7118b0d08a34&limit=100',
+       "jq_str": '.[] | {season, day, description}',
+       "desc": "All feed events for Juice Collins"},
+      {"output_mode": "json", "options": {},
+       "query": 'eventually/v2/events?type=37_or_39&limit=2000',
+       "jq_str": '.[].description | sub(".* is (Beaned by|Poured Over with) a "; "") | sub(".\\n.*"; "")',
+       "desc": "All of the beaned/poured over coffee variations since the feed existed."},
+      {"output_mode": "json", "options": {},
+       "query": 'chronicler/v2/entities?type=player',
+       "jq_str": '.items[].data | select(.name == "Sixpack Dogwalker")',
+       "desc": "Shows both sixpack dogwalkers."},
+      {"output_mode": "count", "options": {},
+       "query": 'eventually/v2/events?type=71&limit=1000 ',
+       "jq_str": '.[] | .playerTags[] | $players[.]',
+       "desc": "The number of times players have entered the tunnels."},
+    ];
 
-  if(urlParams.has("query")) {
-    $("#query").val(urlParams.get("query"));
-  }
+subqueries = {};
+response = null;
+needToLoad = true;
 
-  if(urlParams.has("jq_str")) {
-    $("#jq_str").val(urlParams.get("jq_str"));
-  }
-
-  if(urlParams.has("csv_enable")) {
-    $("#csv_enable").prop('checked', true);
-  }
-
-  if(urlParams.has("table_enable")) {
-    $("#table_enable").prop('checked', true);
-  }
-
-  if(urlParams.has("count_enable")) {
-    $("#count_enable").prop('checked', true);
-  }
-
-  if(urlParams.has("team_enable")) {
-    $("#team_enable").prop('checked', true);
-  }
-
-  if(urlParams.has("player_enable")) {
-    $("#player_enable").prop('checked', true);
+function loadState() {
+  var saved_state = localStorage.getItem("state");
+  if(saved_state) {
+    parsed_state = JSON.parse(saved_state);
+    for(param in parsed_state) {
+      if(parsed_state[param]) {
+        state[param] = parsed_state[param];
+      }
+    }
   }
 }
 
-function do_jq(data, jq_args) {
-  $("#jq_load").show();
+function saveState() {
+  var saved_state = localStorage.setItem("state", JSON.stringify(state));
+}
+
+function clearState() {
+  state = {"output_mode": "json",
+             "base": "sibr2",
+             "query": "",
+             "jq_str": "",
+             "flags": "",
+             "desc": "",
+             "options": {}
+            };
+}
+
+function stateFromURL() {
+  var urlParams = new URLSearchParams(window.location.search);
+  if(Array.from(urlParams.entries()).length > 0) {
+    clearState();
+  }
+  for(param of urlParams.entries()) {
+    if(param[0].endsWith("_enable")) {
+      state["options"][param[0]] = param[1];
+    }
+    state[param[0]] = param[1];
+  }
+}
+
+function stateFromPage() {
+  state["output_mode"] = $("#output_mode").val();
+  state["base"] = $("#base").val();
+  state["query"] = $("#query").val();
+  state["jq_str"] = $("#jq_str").val();
+  state["desc"] = $("#desc").val();
+  // TODO Options
+}
+
+function stateToPage() {
+  $("#output_mode").val(state["output_mode"]);
+  $("#base").val(state["base"]);
+  $("#query").val(state["query"]);
+  $("#jq_str").val(state["jq_str"]);
+  $("#desc").val(state["desc"]);
+  // TODO Options
+}
+
+function download_file(ext, data) {
+  var a = document.body.appendChild(
+    document.createElement("a")
+  );
+  a.download = "data." + ext;
+  a.href = "data:text/html," + data;
+  a.click();
+}
+
+function trusted_subquery(url, jq_str, key, callback = null) {
+  if(!(key in subqueries)) {
+    $.ajax({url: url, success: function(data) {
+      subqueries[key] = JSON.stringify(jq.json(data, jq_str));
+      if(callback) { callback(); }
+    }});
+    return true;
+  }
+  return false;
+}
+
+function resolve_var_errors(error) {
+  console.log(error);
+  if(error.startsWith("jq: error: $players is not defined")) {
+    console.log("attempting to resolve error");
+    $("#web_load").show();
+    res = trusted_subquery("https://api.sibr.dev/chronicler/v2/entities?type=player",
+                           "[.items[].data | {(.id): (try (.state.unscatteredName) // .name)}] | add",
+                           "players",
+                            function(argument) {
+                              $("#web_load").hide();
+                              recalculate(false, true);
+                            });
+
+    if(!res) {
+      $("#web_load").hide();
+    }
+    return true;
+  }
+
+  if(error.startsWith("jq: error: $teams is not defined")) {
+    $("#web_load").show();
+    res = trusted_subquery("https://api.sibr.dev/chronicler/v2/entities?type=team",
+                           "[.items[].data | {(.id): .fullName}] | add",
+                           "teams",
+                            function(argument) {
+                              $("#web_load").hide();
+                              recalculate(false, true);
+                            });
+
+    if(!res) {
+      $("#web_load").hide();
+    }
+    return true;
+  }
+  return false;
+}
+
+function untrusted_jq(data, jq_args) {
+  flags = ["-c"];
+  for(query in subqueries) {
+    flags = flags.concat(['--argjson', query, subqueries[query]]);
+  }
+
   try {
-    flags = ["-c"];
-    if(horrible_team_string != "") {
-      flags = flags.concat(['--argjson', 'teams', horrible_team_string]);
-    }
-    if(horrible_player_string != "") {
-      flags = flags.concat(['--argjson', 'players', horrible_player_string]);
-    }
     res = jq.raw(data, jq_args, flags);
+    // Collect multiple separate outputs into an array if needed.
     if (res.indexOf('\n') !== -1) {
       res = res
         .split('\n')
-        .filter(function(x) {
-          return x;
-        })
-        .reduce(function(acc, line) {
-          return acc.concat(JSON.parse(line));
-        }, []);
+        .filter(function(x) { return x; })
+        .reduce(function(acc, line) { return acc.concat(JSON.parse(line)); }, []);
     } else {
       res = JSON.parse(res);
     }
   } catch (error) {
-    $("#jq_load").hide();
-    $("#error_div").html(error.stack.replace(/(?:\r\n|\r|\n)/g, '<br>'));
-    $("#error_div").show();
-    globalError = error;
-    return output;
-  }
-
-  $("#error_div").hide();
-
-  $("#tableResult").empty();
-  $("#result").show();
-  if($("#count_enable").is(":checked")) {
-    var occurrences = { };
-    for (var i = 0, j = res.length; i < j; i++) {
-       occurrences[res[i]] = (occurrences[res[i]] || 0) + 1;
+    if(!resolve_var_errors(error.stack)) {
+      $("#error_div").html(error.stack.replace(/(?:\r\n|\r|\n)/g, '<br>'));
+      $("#error_div").show();
+      return null;
     }
-    sorted = Object.entries(occurrences).sort(([,a],[,b]) => b-a).map(x => x[1] + " " + x[0]);
-    text = sorted.join("\n");
-    $("#result").text(text);
-  } else if($("#table_enable").is(":checked")) {
-    $("#result").hide();
-    $("#result").text("");
-    $("#tableResult").html(doCSVTable(res));
-  } else if($("#csv_enable").is(":checked")) {
-    $("#result").text(doCSV(res));
-  } else {
-    $("#result").text(JSON.stringify(res, null, 2));
   }
-  document.querySelectorAll('#result').forEach(el => {
-    hljs.highlightElement(el);
-  });
-  $("#jq_load").hide();
-  url = window.location.origin + window.location.pathname + "?" + $("#input_form").serialize();
-  window.history.pushState(url, 'Web JQ', url);
+  $("#error_div").hide();
   return res;
 }
 
-function recalculate() {
-  // TODO: point at API2 and re-enable html elements for players and teams.
-  if($("#player_enable").is(":checked") && horrible_player_string == "") {
-    $("#player_load").show();
-    $.ajax({url: "https://api.sibr.dev/chronicler/v2/entities?type=player", success: function(players) {
-      horrible_player_string = JSON.stringify(jq.json(players, "[.items[].data | {(.id): (try (.state.unscatteredName) // .name)}] | add"));
-      output = null;
-      $("#player_load").hide();
-      recalculate();
-    }});
+function do_jq(data, jq_args) {
+  // Generate the output data
+  $("#jq_load").show();
+  output = untrusted_jq(data, jq_args) || output;
+
+  // Return output fields to default state
+  $("#tableResult").empty();
+  $("#result").show();
+
+  // Display the output data
+  switch(state["output_mode"]) {
+    case "count":
+      var occurrences = { };
+      for (var i = 0, j = output.length; i < j; i++) {
+         occurrences[output[i]] = (occurrences[output[i]] || 0) + 1;
+      }
+      sorted = Object.entries(occurrences).sort(([,a],[,b]) => b-a).map(x => x[1] + " " + x[0]);
+      text = sorted.join("\n");
+      $("#result").text(text);
+      break;
+    case "csv":
+      $("#result").text(doCSV(output));
+      break;
+    case "table":
+      $("#result").hide();
+      $("#result").text("");
+      $("#tableResult").html(doCSVTable(output));
+      break;
+    default:
+      $("#result").text(JSON.stringify(output, null, 2));
   }
 
-  if($("#team_enable").is(":checked") && horrible_team_string == "") {
-    $("#team_load").show();
-    $.ajax({url: "https://api.sibr.dev/chronicler/v2/entities?type=team", success: function(teams) {
-      horrible_team_string = JSON.stringify(jq.json(teams, "[.items[].data | {(.id): .fullName}] | add"));
-      output = null;
-      $("#team_load").hide();
-      recalculate();
-    }});
+  // Highlight the code block
+  document.querySelectorAll('#result').forEach(el => {
+    hljs.highlightElement(el);
+  });
+
+  $("#jq_load").hide();
+}
+
+function recalculate(refetch, recalc) {
+  if(!(refetch || recalc)) {
+    return;
   }
-  if (!response){
-    $("#web_load").show();
+  stateFromPage();
+
+  if (refetch){
     $("#web_error").hide();
     $("#error_div").hide();
 
-    if($("#base").val() == "sibr") {
-      url = "https://api.sibr.dev/" + $("#query").val();
-    } else if ($("#base").val() == "sibr2") {
-      url = "https://api2.sibr.dev/" + $("#query").val();
-    } else if ($("#base").val() == "blaseball") {
-      url = "https://api.sibr.dev/corsmechanics/www.blaseball.com/" + $("#query").val();
+    if(state["base"] == "sibr") {
+      url = "https://api.sibr.dev/" + state["query"];
+    } else if (state["base"] == "sibr2") {
+      url = "https://api2.sibr.dev/" + state["query"];
+    } else if (state["base"] == "blaseball") {
+      url = "https://api.sibr.dev/corsmechanics/www.blaseball.com/" + state["query"];
     } else {
       url = "";
     }
 
-    if(url == "" || $("#query").val() == ""){
-      $("#web_load").hide();
+    if(url == "" || state["query"] == ""){
       return;
     }
 
+    $("#web_load").show();
+
     $.ajax({url: url, dataType: "text", success: function(data) {
+        response = $.trim(data);
         $("#web_load").hide();
-        response = data;
-        output = do_jq(data, $("#jq_str").val());
+        do_jq(response, state["jq_str"]);
       }}
     );
-  } else if (!output) {
-    output = do_jq(response, $("#jq_str").val());
+    needToLoad = false;
+  } else if (recalc) {
+    do_jq(response, state["jq_str"]);
   }
 }
 
 $( document ).ready(function() {
   $("#json_btn").on('click', function() {
-    var a = document.body.appendChild(
-      document.createElement("a")
-    );
-    a.download = "data.json";
-    a.href = "data:text/html," + JSON.stringify(output, null, 2);
-    a.click();
+    download_file("json", JSON.stringify(output, null, 2));
   });
 
   $("#csv_btn").on('click', function() {
-    var a = document.body.appendChild(
-      document.createElement("a")
-    );
-    a.download = "data.csv";
-    a.href = "data:text/html," + doCSV(output);
-    a.click();
+    download_file("csv", doCSV(output));
   });
 
   hljs.highlightAll();
-  getURLargs();
+  // TODO: Do other new stateful functions
 });
 
 jq.onInitialized.addListener(function function_name(argument) {
-  recalculate();
+  loadState();
+  stateFromURL();
+  stateToPage();
+  recalculate(true, true);
 
-  // These are commented as we moved to submit button based jq
+  $('.updateWatchURL').on('input', function() {
+    needToLoad = true;
+  });
 
-  // $('#base').on('input', function() {
-  //   response = null;
+  // $('.updateWatchJQ').on('input', function() {
   //   clearTimeout(timeoutId);
   //   timeoutId = setTimeout(function() {
-  //     recalculate();
+  //     recalculate(false, true);
   //   }, 1000);
   // });
 
-  // $('#query').on('input', function() {
-  //   response = null;
-  //   clearTimeout(timeoutId);
-  //   timeoutId = setTimeout(function() {
-  //     recalculate();
-  //   }, 1000);
-  // });
+  $('.updateImmediate').on('change', function() {
+    recalculate(needToLoad, true);
+  });
 
-  // $('#jq_str').on('input', function() {
-  //   output = null;
-  //   clearTimeout(timeoutId);
-  //   timeoutId = setTimeout(function() {
-  //     recalculate();
-  //   }, 1000);
+  // $("#random_btn").on('click', function() {
+  //   $("#base").val("sibr");
+  //   rand_query = examples[Math.floor(Math.random()*examples.length)];
+  //   for(param in rand_query) {
+  //     state[param] = rand_query[param];
+  //   }
+  //   stateToPage();
+  //   recalculate(true, true);
   // });
 
   $("#recalculate").on('click', function() {
-    output = null;
-    recalculate();
+    recalculate(needToLoad, true);
   });
 
 
-  $('#csv_enable').on('change', function() {
-    output = null;
-    recalculate();
+  $("#clear_btn").on('click', function() {
+    clearState();
+    stateToPage();
+    $("#tableResult").empty();
+    $("#result").show();
+    $("#result").text("");
   });
 
-  $('#table_enable').on('change', function() {
-    output = null;
-    recalculate();
-  });
+  $("#share_btn").on('click', function() {
+    url = window.location.origin + window.location.pathname + "?" + $("#input_form").serialize();
 
-  $('#count_enable').on('change', function() {
-    output = null;
-    recalculate();
-  });
-
-  $('#team_enable').on('change', function() {
-    output = null;
-    recalculate();
-  });
-
-  $('#player_enable').on('change', function() {
-    output = null;
-    recalculate();
-  });
-
-  $("#random_btn").on('click', function() {
-    examples = [
-      {"boxes": [], "query": "chronicler/v2/versions?type=globalevents&order=desc", "jq_str": "[.items[] | {(.validFrom): [.data[].msg]}] | add"},
-      {"boxes": [], "query": "chronicler/v2/entities?type=stadium", "jq_str": ".items[].data.name"},
-      {"boxes": [], "query": "chronicler/v2/entities?type=team", "jq_str": "[.items[].data | select(.stadium) | {team: .nickname, eDensity: .eDensity}] | sort_by(.eDensity)[]"},
-      {"boxes": [], "query": 'chronicler/v2/entities?type=item', "jq_str": '.items | .[].data | select(.name == "Inflatable Sunglasses")'},
-      {"boxes": [], "query": 'chronicler/v2/entities?type=team', "jq_str": '.items[].data | select(.permAttr| index("AFFINITY_FOR_CROWS")) | .nickname'},
-      {"boxes": [], "query": 'eventually/v2/events?playerTags=21cbbfaa-100e-48c5-9cea-7118b0d08a34&limit=100', "jq_str": '.[] | {season, day, description}'},
-      {"boxes": ["player", "count"], "query": 'eventually/v2/events?type=71&limit=1000 ', "jq_str": '.[] | .playerTags[] | $players[.]'},
-    ];
-    $("#base").val("sibr");
-    rand_query = examples[Math.floor(Math.random()*examples.length)];
-    $("#query").val(rand_query["query"]);
-    $("#jq_str").val(rand_query["jq_str"]);
-    if(rand_query["boxes"].includes("player")) {
-      $("#player_enable").prop('checked', true);
-    } else {
-      $("#player_enable").prop('checked', false);
-    }
-    if(rand_query["boxes"].includes("team")) {
-      $("#team_enable").prop('checked', true);
-    } else {
-      $("#team_enable").prop('checked', false);
-    }
-    if(rand_query["boxes"].includes("count")) {
-      $("#count_enable").prop('checked', true);
-    } else {
-      $("#count_enable").prop('checked', false);
-    }
-    if(rand_query["boxes"].includes("csv")) {
-      $("#csv_enable").prop('checked', true);
-    } else {
-      $("#csv_enable").prop('checked', false);
-    }
-    if(rand_query["boxes"].includes("csv")) {
-      $("#table_enable").prop('checked', true);
-    } else {
-      $("#table_enable").prop('checked', false);
-    }
-    response = null;
-    recalculate();
+    $.post({url: "https://tiny.sibr.dev/submit", data: {"url": url}, success: function(data) {
+        $("#link_div").text("https://tiny.sibr.dev/" + data);
+        $('#shareModal').modal();
+      }}
+    );
   });
 });
+
+
+
